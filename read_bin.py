@@ -1,4 +1,5 @@
 import numpy as np
+import dateutil.parser as dp
 
 file_header_dtype = np.dtype([('file_cookie', 'S2'),
                                ('file_version', 'S2'),
@@ -28,7 +29,7 @@ buffer_header_dtype = np.dtype([('header_size', 'i4'),
                                 ('bytes_per_point', 'i2'),
                                 ('buffer_size', 'i4')])
 
-def read_agilent_binary(fname, use_segments=False, include_time_vector=False):
+def read_agilent_binary(fname, use_segments=False, include_time_vector=False, include_datetime=True):
     """Reads all the channel data from an Agilent/Infinium Oscilloscope into a dict
     indexed by scope channel number. Optionally computes the time vector, and adds that to
     the output dict also."""
@@ -43,21 +44,29 @@ def read_agilent_binary(fname, use_segments=False, include_time_vector=False):
             #Read the waveform header
             wf_header = np.fromfile(f, dtype=waveform_header_dtype, count=1)
 
-            #Grab the channel name out in a python 2/3 compatible way
+            #Grab important strings in a python 2/3 compatible way
             channel_string = bytes(wf_header['waveform_string'][0]).decode('utf-8').replace(' ', '_')
-            segment_index = int(wf_header['segment_index'][0])
+            date_string = bytes(wf_header['date_string'][0]).decode('utf-8')
+            time_string = bytes(wf_header['time_string'][0]).decode('utf-8')
+
 
             #Start a new dictionary
             wf_dict[channel_string] = {}
 
-            #Might need to allow for multiple segments, in which case y_data is a dict keyed by segment index
+            #Might need to allow for multiple segments, in which case y_data is a dict
             if use_segments:
-                wf_dict[channel_string]['y_data'] = {}
+                wf_dict[channel_string]['segment_data'] = []
+                segment_index = int(wf_header['segment_index'][0])
+                time_tag = wf_header['time_tag'][0]
 
             #Fill with metadata
             for key in wf_header.dtype.names:
-                if key not in ['header_size', 'waveform_type', 'num_waveform_buffers', 'segment_index']:
+                if key not in ['header_size', 'waveform_type', 'num_waveform_buffers', 'segment_index', 'time_tag']:
                     wf_dict[channel_string][key] = wf_header[key][0]
+
+            if include_datetime:
+                datetime = dp.parse(date_string + ' ' + time_string)
+                wf_dict[channel_string]['datetime'] = datetime
 
             #Loop through all the data buffers for this waveform (usually just one)
             for bfx in range(wf_header['num_waveform_buffers'][0]):
@@ -91,7 +100,11 @@ def read_agilent_binary(fname, use_segments=False, include_time_vector=False):
             assert num_points == len(ch_data), "Points mismatch in buffer!"
 
             if use_segments:
-                wf_dict[channel_string]['y_data'][segment_index] = ch_data
+                y_data = {}
+                y_data['segment_index'] = segment_index
+                y_data['time_tag'] = time_tag
+                y_data['y_data'] = ch_data
+                wf_dict[channel_string]['segment_data'].append(y_data)
             else:
                 wf_dict[channel_string]['y_data'] = ch_data
 
