@@ -103,10 +103,10 @@ def read_agilent_binary(fname, use_segments=False, include_time_vector=False, in
                 y_data = {}
                 y_data['segment_index'] = segment_index
                 y_data['time_tag'] = time_tag
-                y_data['y_data'] = ch_data
+                y_data['y_data'] = ch_data['data']
                 wf_dict[channel_string]['segment_data'].append(y_data)
             else:
-                wf_dict[channel_string]['y_data'] = ch_data
+                wf_dict[channel_string]['y_data'] = ch_data['data']
 
             if include_time_vector:
                 #Build up the time vector
